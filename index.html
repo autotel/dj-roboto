@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DJ Robot</title>
+  <style>
+  @import url(https://fonts.googleapis.com/css?family=Roboto:300italic,300);
+  body{
+    font-family: 'Roboto', sans-serif;
+    color:#FFF;
+    background-color: #000;
+    padding:0; margin:0;
+  }
+  h1{
+    font-family: 'Roboto', sans-serif;
+    color:#FFF;
+  }
+  #hoverinteractive{
+    position:fixed;
+    height:40px;
+    z-index:3;
+    text-align: center;
+    width:10%;
+    left:45%;
+
+  }
+  #hoverinteractive:hover{
+    position: fixed;
+    /*height: 174px;*/
+    z-index: 3;
+    text-align: center;
+    width: 434px;
+    left: 50%;
+    display: block;
+    margin-left: -217px;
+    overflow: hidden;
+  }
+  #hover{
+    text-align: center;
+    width: 100%;position: fixed;
+    background-image: linear-gradient(rgb(0, 0, 0), rgba(4, 16, 42, 0.85), rgb(0, 0, 0));
+    height: 100%;
+    pointer-events: none;
+  }
+  </style>
+</head>
+  <body>
+    <!-- 1. The <iframe> (and video player) will replace this <div> tag. -->
+    <div id="player0" style="width:100%; left:0; height:50%; position:fixed; top:0px"></div>
+    <div id="player1" style="width:100%; left:0; height:50%; position:fixed; top:50%"></div>
+    <div id="hover" style="">
+
+    </div>
+    <div id="hoverinteractive">
+      <h1><i>ROBOTO DJ</i></h1>
+      <p>Will mix youtube videos to make music for you.</p>
+      <p>If you don't like the mixture, jump to the end of the video.</p>
+      <small>Press F12 or the video titles to see more info on the videos. Visit <a href="https://github.com/autotel/dj-roboto/">GitHub</a></small>
+    </div>
+    <script>
+      var decks=2;
+      var deck=[{},{}];
+      for(a=0;a<decks;a++){
+        deck[a]={};
+      }
+      var maxlen=180;
+      //source: https://developers.google.com/youtube/iframe_api_reference#Getting_Started
+      // 2. This code loads the IFrame Player API code asynchronously.
+      var tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      var firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      // 3. This function creates an <iframe> (and YouTube player)
+      //    after the API code downloads.
+      var player=[];
+      function onPlayerStateChange(){};
+      function onPlayerReady(){};
+      function floor(f){return Math.floor(f)};
+      function scaleAndBpmOf(who){
+        var ret={};
+        if(who.hasOwnProperty("bpm")){
+          ret.bpm=who.bpm;
+        }
+        if(who.hasOwnProperty("rbase")){
+          ret.rbase=who.rbase;
+        }
+        if(who.hasOwnProperty("scale")){
+          ret.scale=who.scale;
+        }
+        return ret;
+      }
+      function findVideoMatch(params){
+        //console.log("finding match for:");
+        //console.log(params);
+        var candidates=videoPool;
+        //the non-eliminated candidates
+        var selected=[];
+        //check each video
+        for(v in videoPool){
+          //console.log("video "+v);
+          eliminate=false;
+          //for each requested parameter
+          for(p in params){
+            //if the video in the video pool has this parameter,
+            //may be incompatible. Therefore check if the requested params equals the videopool params
+            if(videoPool[v].hasOwnProperty(p)){
+              if(videoPool[v][p]!=params[p]){
+                //console.log("eliminate because "+videoPool[v][p]+"!="+params[p]);
+                eliminate=true;
+              }
+            }
+          }
+          if(!eliminate){
+            selected.push(videoPool[v]);
+          }
+        }
+        return selected;
+      }
+      function selectOneVideoMatch(who){
+
+        //avoid loading twice the same video
+        //while(rets===who){
+          var rets=findVideoMatch(scaleAndBpmOf(who));
+          rets=rets[parseInt(Math.random()*rets.length)];
+        //}
+        console.log("picking up the video:")
+        console.log(rets);
+        console.log("found at https://www.youtube.com/watch?v="+rets.src);
+        return rets;
+      }
+      function changestate(event,index){
+        if(event.data==0){//if data is zero, it indicates video finished
+          //console.log("video finished. loading match  index="+index+", other="+Math.abs(index-1));
+          //console.log(deck[Math.abs(index-1)]);
+          //the math.abs index-1 selects the video on the other deck. only for two-deck configuration
+          deck[index]=selectOneVideoMatch(deck[Math.abs(index-1)]);
+          player[index].loadVideoById(deck[index].src);
+
+        }
+        if (event.data==1){//when video starts
+          if(maxlen<player[index].getDuration()-player[index].getCurrentTime()){
+            player[index].seekTo(player[index].getDuration()-maxlen, true);
+          }
+
+          player[index].setVolume(1);
+          setfadein=window.setInterval(function(){
+            gv=player[index].getVolume();
+            if(gv>95){
+              unsetFadein();
+            }else{
+              ////console.log(gv+1);
+              player[index].setVolume(gv+1);
+            }
+          },10);
+          function unsetFadein(){
+            window.clearInterval(setfadein);
+          }
+
+        }
+      }
+      function playerready(event,index){
+        //console.log("pred"+index);
+        if(index==player.length-1){
+          player[index].loadVideoById(initialVideo.src);
+          player[Math.abs(index-1)].loadVideoById(initialVideo.src);
+          player[index].playVideo();
+          player[Math.abs(index-1)].playVideo();
+          //if video is long, just skip it
+
+        }
+      }
+      function onYouTubeIframeAPIReady() {
+        for(index=0; index<decks; index++){
+          //console.log("init player"+index);
+          player[index] = new YT.Player('player'+index, {
+            height: '100%',
+            width: '100%',
+            events:{
+              onPlayerReady:function(event){
+                //console.log("onPlayerReady");
+                playerready(event,event.target.myindex);
+              },
+              onStateChange:function(event) {
+                //console.log("onStateChange");
+                changestate(event,event.target.myindex);
+              },
+              onError:function(event) {
+                //console.log("onStateChange");
+                changestate({data:0},event.target.myindex);
+              },
+              'onReady': function(event) {
+                  //console.log(event);
+                  event.target.loadVideoById("q5oGbd_13oU");
+              }
+            }
+          });
+          player[index].myindex=index;
+        }
+      }
+
+      var done = false;
+      //
+      // var frames={
+      //   "youtube":'<iframe width="853" height="480" src="https://www.youtube.com/embed/{src}?rel=0&amp;controls=0&amp;showinfo=0" frameborder="0" allowfullscreen></iframe>',
+      // };
+      var videoPool=[
+        {
+          "tags":"blues, drum",
+          "bpm":120,
+          "frame":"youtube",
+          "src":"qCjTkhdxhgk",
+          "rbase":2
+        },
+        {
+          "tags":"blues, drum",
+          "bpm":60,
+          "frame":"youtube",
+          "src":"EUPhfA9uMSM",
+          "rbase":2
+        },
+        {
+          "tags":"blues, drum",
+          "bpm":90,
+          "frame":"youtube",
+          "src":"Axrzkrk08pg",
+          "scale":"A",
+          "rbase":2
+        },{
+          "tags":"straight, drum",
+          "bpm":130,
+          "frame":"youtube",
+          "src":"ov_g-r7Vo8M",
+          "scale":"A",
+          "rbase":2
+        },
+        {
+          "tags":"chord, pad",
+          "frame":"youtube",
+          "src":"i9JkhNmsF9U",
+          "scale":"Cmaj/Amin"
+        },
+        {
+          "tags":"chord, pad",
+          "frame":"youtube",
+          "src":"n29vIZhubJQ",
+          "scale":"Dmaj/Bmin"
+        },
+        {
+          "tags":"chord, pad",
+          "frame":"youtube",
+          "src":"bn2akAxt27Q",
+          "scale":"Gmaj/Emin"
+        },
+        {
+          "tags":"chord, pad",
+          "frame":"youtube",
+          "src":"jl_d1U34HiQ",
+          "scale":"Amaj/F#min"
+        },
+        {
+          "tags":"percussion",
+          "bpm":60,
+          "frame":"youtube",
+          "src":"6V8-7XkXtEA",
+          "rbase":2
+        },
+        {
+          "tags":"hip-hop, drum",
+          "bpm":90,
+          "frame":"youtube",
+          "src":"QV0va6a6jLo",
+          "rbase":2
+        },
+        {
+          "tags":"drum",
+          "bpm":110,
+          "frame":"youtube",
+          "src":"CrDc_TsmYLI",
+          "rbase":2
+        },
+        {
+          "tags":"drum, funk",
+          "bpm":110,
+          "frame":"youtube",
+          "src":"sWZeWqntCVw",
+          "rbase":2
+        },
+        {
+          "tags":"funk, pattern",
+          "bpm":110,
+          "frame":"youtube",
+          "src":"VjZobH3XqQI",
+          "rbase":2,
+          "scale":"Amaj/F#min"
+        },{
+          "tags":"tabla, percussion",
+          "bpm":80,
+          "frame":"youtube",
+          "src":"9FJwcDEAc74",
+          "rbase":2,
+        },{
+          "tags":"brasil, percussion",
+          "bpm":190,
+          "frame":"youtube",
+          "src":"t5AQaTeDz-w",
+          "rbase":2,
+        },{
+          "tags":"brasil, percussion, samba",
+          "bpm":120,
+          "frame":"youtube",
+          "src":"u42yhmSfLwA",
+          "rbase":2,
+        },{
+          "tags":"brasil, percussion, bossa",
+          "bpm":140,
+          "frame":"youtube",
+          "src":"_Am4mi76-s8",
+          "rbase":2,
+        },{
+          "tags":"brasil, percussion, bossa",
+          "bpm":160,
+          "frame":"youtube",
+          "src":"Fh_7MPYVKTo",
+          "rbase":2,
+        },{
+          "tags":"guitar, arpegios",
+          "bpm":60,
+          "frame":"youtube",
+          "src":"CHLMD2KnCLk",
+          "scale":"CHLMD2KnCLk",
+          "rbase":2,
+        },{
+          "tags":"triphop, drum",
+          "bpm":70,
+          "frame":"youtube",
+          "src":"zmSDWp8r1Q8",
+          "rbase":2,
+        },{
+          "tags":"funkrock, drum",
+          "bpm":111,
+          "frame":"youtube",
+          "src":"evY57mKJphc",
+          "rbase":2,
+        },{
+          "tags":"hiphop, drum",
+          "bpm":140,
+          "frame":"youtube",
+          "src":"ADQKnVFFa-E",
+          "rbase":2,
+        },{
+          "tags":"latin, digital, drum",
+          "bpm":130,
+          "frame":"youtube",
+          "src":"zf79SfHOT8M",
+          "rbase":3,
+        },{
+          "tags":"chachacha, drum",
+          "bpm":130,
+          "frame":"youtube",
+          "src":"TlkCDTzXQK4",
+          "rbase":2,
+        },{
+          "tags":"drum and bass",
+          "bpm":176,
+          "frame":"youtube",
+          "src":"ZtKQet0vavI",
+          "rbase":2,
+        },{
+          "tags":"drum and bass",
+          "bpm":178,
+          "frame":"youtube",
+          "src":"3D8QoO6o-78",
+          "rbase":2,
+        },{
+          "tags":"drum, funk, electronic",
+          "bpm":120,
+          "frame":"youtube",
+          "src":"2sS-1kR9wYU",
+          "rbase":2,
+        },{
+          "tags":"chord, progressive, electronic",
+          "bpm":80,
+          "frame":"youtube",
+          "src":"vRrvpWae_y8",
+          "scale":"F#maj",
+          "rbase":2,
+        },{
+          "tags":"synth, electronic",
+          "bpm":100,
+          "frame":"youtube",
+          "scale":"F#maj",
+          "src":"arPVmPG-UWw",
+          "rbase":2,
+        },{
+          "tags":"drum, electronic",
+          "bpm":80,
+          "frame":"youtube",
+          "src":"WByqc5iIr7o",
+          "rbase":2,
+        },{
+          "tags":"percussion, ethnic, electronic",
+          "bpm":60,
+          "frame":"youtube",
+          "src":"qVXpbiplF8c",
+          "rbase":2,
+        },{
+          "tags":"percussion, ethnic, electronic",
+          "bpm":70,
+          "frame":"youtube",
+          "src":"J_DNIq0QjzI",
+          "rbase":2,
+        },{
+          "tags":"percussion, clave",
+          "bpm":140,
+          "frame":"youtube",
+          "src":"F03sQoEdMWI",
+          "rbase":2,
+        },{
+          "tags":"percussion, clave",
+          "bpm":130,
+          "frame":"youtube",
+          "src":"K9ZN5lFRqxc",
+          "rbase":2,
+        },{
+          "tags":"percussion, clave",
+          "bpm":110,
+          "frame":"youtube",
+          "src":"w1kGKvvvBBk",
+          "rbase":2,
+        },{
+          "tags":"percussion, clave",
+          "bpm":80,
+          "frame":"youtube",
+          "src":"3pH19S-ARB0",
+          "rbase":2,
+        },{
+          "tags":"percussion, clave",
+          "bpm":60,
+          "frame":"youtube",
+          "src":"B-6GBYEBjCU",
+          "rbase":2,
+        },{
+          "tags":"marching snare, snare",
+          "bpm":130,
+          "frame":"youtube",
+          "src":"jv3X9Jhg05E",
+          "rbase":2,
+        },{
+          "tags":"bongo, exotic",
+          "bpm":120,
+          "frame":"youtube",
+          "src":"dUoWYy_lrxk",
+          "rbase":2,
+        },{
+          "tags":"bongo, drum",
+          "bpm":113,
+          "frame":"youtube",
+          "src":"XmsYhS73OAM",
+          "rbase":2,
+        },{
+          "tags":"proudbeat, drum",
+          "bpm":112.5,
+          "frame":"youtube",
+          "src":"xpETZYa21JE",
+          "rbase":2,
+        },{
+          "tags":"proudbeat, drum",
+          "bpm":113,
+          "frame":"youtube",
+          "src":"RqPzdIeNaCk",
+          "rbase":2,
+        },{
+          "tags":"chicbeat, drum",
+          "bpm":115,
+          "frame":"youtube",
+          "src":"TlKmGdFfG7A",
+          "rbase":2,
+        },{
+          "tags":"cajon",
+          "bpm":120,
+          "frame":"youtube",
+          "src":"U8A1CywlXMk",
+          "rbase":2,
+        },{
+          "tags":"cajon",
+          "bpm":120,
+          "frame":"youtube",
+          "src":"7dIvL5C3avs",
+          "rbase":2,
+        },{
+          "tags":"cajon, flamenco",
+          "bpm":110,
+          "frame":"youtube",
+          "src":"VGw9bb-2guA",
+          "rbase":3,
+        },{
+          "tags":"cajon, flamenco",
+          "bpm":120,
+          "frame":"youtube",
+          "src":"YiKJRd5ql6s",
+          "rbase":3,
+        }
+      ];
+      var initialVideo=videoPool[floor(Math.random()*videoPool.length)];
+
+    </script>
+  </body>
+</html>
