@@ -1,6 +1,6 @@
 # dj-roboto
 
-Dj Roboto makes music from youtube for you. It matches the tempo and the key (don't get excited; it is handwritten in an array, not detected)
+Dj Roboto makes music from youtube for you. It matches the tempo and the key (don't get excited; it is handwritten in an array, not detected) and relies heavily on the Youtube iframe API
 It doesn't match the beat start; because sometimes misaligned rhythms are very interesting.
 
 See it in action at <a href="http://autotel.co/djroboto">autotel.co/djroboto</a>
